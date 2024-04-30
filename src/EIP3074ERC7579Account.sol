@@ -5,6 +5,8 @@ import { Auth } from "./Auth.sol";
 import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
 import { IValidator, IModule } from "./interfaces/IERC7579Modules.sol";
 import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
+import "./lib/ModeLib.sol";
+import "./lib/ExecutionLib.sol";
 import "forge-std/console.sol";
 import "./utils.sol";
 import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
@@ -23,12 +25,28 @@ import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
 // @notice THIS IS EXPERIMENTAL, DO NOT USE THIS FOR PROD
 // @dev NOTE : this is vulnerable to DoS since actual validation for userOpHash is done on the execution side, figuring out the fixes though
 contract EIP3074ERC7579Account is Auth {
+    using ExecutionLib for bytes;
+
     IEntryPoint public immutable ep;
 
     error OutOfTimeRange();
 
     constructor(IEntryPoint _ep) {
         ep = _ep;
+    }
+
+    function executeFromExecutor(ModeCode mode, bytes calldata executionCalldata)
+        external
+        returns (bytes[] memory returnData)
+    {
+        (CallType callType, ExecType execType, ModeSelector modeSelector, ModePayload modePayload) =
+            ModeLib.decode(mode);
+
+        if (modeSelector != MODE_EIP3074) revert();
+
+        address eoa = address(bytes20(ModePayload.unwrap(modePayload)));
+
+        MultiSendAuthCallOnly.multiSend(executionCalldata);
     }
 
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
