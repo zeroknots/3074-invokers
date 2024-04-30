@@ -10,3 +10,6 @@
 [submodule "lib/solidity"]
 	path = lib/solidity
 	url = https://github.com/clabby/solidity
+[submodule "lib/sentinellist"]
+	path = lib/sentinellist
+	url = https://github.com/zeroknots/sentinellist
