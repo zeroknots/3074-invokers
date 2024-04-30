@@ -110,9 +110,15 @@ contract EIP3074ERC7579Account is Auth {
 
     function executeUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash) external {
         require(msg.sender == address(ep), "!ep");
-        address eoa = address(bytes20(bytes32(userOp.nonce)));
-        address validator = address(bytes20(userOp.signature[0:20]));
-        (bytes calldata validatorData, bytes calldata validatorSig, bytes calldata authSig) = parseSig(userOp.signature);
+        address eoa;
+        address validator = address(bytes20(userOp.signature[1:21]));
+        uint256 nonce = userOp.nonce;
+        assembly {
+            eoa := shr(96, nonce)
+        }
+
+        (, bytes calldata validatorSig, bytes calldata authSig) = SigDecode.unpackEnable(userOp.signature[53:]);
+        bytes memory validatorData = $validatorData[validator][eoa].data;
 
         // do auth
         doAuth(eoa, validator, validatorData, authSig);
@@ -121,22 +127,10 @@ contract EIP3074ERC7579Account is Auth {
         PackedUserOperation memory op = userOp;
         op.signature = validatorSig;
 
-        uint256 validationData = doValidation(validator, op, userOpHash);
-        if (validationData != 0) {
-            ValidationData memory data = _parseValidationData(validationData);
-            bool outOfTimeRange = block.timestamp > data.validUntil || block.timestamp < data.validAfter;
-            if (outOfTimeRange) {
-                revert OutOfTimeRange();
-            }
-        }
-
-        // do execute
-        // NOTE : this will make some incompatibility with 7579 accounts,
-        // hooks that does not rely on the 7579 account interface will be compatible atm, but this can be fixed
         doExecute(userOp.callData[4:]);
     }
 
-    function doAuth(address eoa, address validator, bytes calldata validatorData, bytes calldata authSig) internal {
+    function doAuth(address eoa, address validator, bytes memory validatorData, bytes calldata authSig) internal {
         bytes32 commit = keccak256(abi.encodePacked(validator, validatorData));
         Signature memory sig = Signature({
             signer: eoa,

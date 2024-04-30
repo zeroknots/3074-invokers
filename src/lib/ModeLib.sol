@@ -125,6 +125,7 @@ library ModeLib {
 }
 
 using { eqModeSelector as == } for ModeSelector global;
+using { neqModeSelector as != } for ModeSelector global;
 using { eqCallType as == } for CallType global;
 using { eqExecType as == } for ExecType global;
 
@@ -138,4 +139,8 @@ function eqExecType(ExecType a, ExecType b) pure returns (bool) {
 
 function eqModeSelector(ModeSelector a, ModeSelector b) pure returns (bool) {
     return ModeSelector.unwrap(a) == ModeSelector.unwrap(b);
+}
+
+function neqModeSelector(ModeSelector a, ModeSelector b) pure returns (bool) {
+    return ModeSelector.unwrap(a) != ModeSelector.unwrap(b);
 }
