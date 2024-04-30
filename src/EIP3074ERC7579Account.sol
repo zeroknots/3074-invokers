@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { Auth } from "./Auth.sol";
+import { Auth } from "./utils/Auth.sol";
 import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
-import { IValidator, IModule } from "./interfaces/IERC7579Modules.sol";
+import { IValidator, IModule, IStatelessValidator } from "./interfaces/IERC7579Modules.sol";
 import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
+import { SentinelList4337Lib } from "sentinellist/SentinelList4337.sol";
 import "./lib/ModeLib.sol";
 import "./lib/ExecutionLib.sol";
 import "forge-std/console.sol";
-import "./utils.sol";
-import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
+import "./utils/utils.sol";
+import "./DataTypes.sol";
+import { MultiSendAuthCallOnly } from "./utils/MultiSendAuthCallOnly.sol";
+import "forge-std/console2.sol";
 /*
     TODO
     - add storage support 
@@ -26,6 +29,15 @@ import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
 // @dev NOTE : this is vulnerable to DoS since actual validation for userOpHash is done on the execution side, figuring out the fixes though
 contract EIP3074ERC7579Account is Auth {
     using ExecutionLib for bytes;
+    using SentinelList4337Lib for SentinelList4337Lib.SentinelList;
+    using SigDecode for bytes;
+
+    struct ValidatorData {
+        bytes data;
+    }
+
+    SentinelList4337Lib.SentinelList internal $validators;
+    mapping(address validatorModule => mapping(address account => ValidatorData data)) $validatorData;
 
     IEntryPoint public immutable ep;
 
@@ -35,49 +47,76 @@ contract EIP3074ERC7579Account is Auth {
         ep = _ep;
     }
 
-    function executeFromExecutor(ModeCode mode, bytes calldata executionCalldata)
-        external
-        returns (bytes[] memory returnData)
-    {
-        (CallType callType, ExecType execType, ModeSelector modeSelector, ModePayload modePayload) =
-            ModeLib.decode(mode);
-
-        if (modeSelector != MODE_EIP3074) revert();
-
-        address eoa = address(bytes20(ModePayload.unwrap(modePayload)));
-
-        MultiSendAuthCallOnly.multiSend(executionCalldata);
-    }
-
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
         external
         returns (uint256)
     {
         require(msg.sender == address(ep), "!ep");
-        address caller = address(bytes20(bytes32(userOp.nonce)));
-        address validator = address(bytes20(userOp.signature[0:20]));
-        uint256 nonce = uint256(bytes32(userOp.signature[20:52]));
-        (bytes calldata validatorData,, bytes calldata authSig) = parseSig(userOp.signature);
+        address eoa;
+        uint256 nonce = userOp.nonce;
+        assembly {
+            eoa := shr(96, nonce)
+        }
+        Operation operation;
+        address validator;
+        (operation, validator, nonce) = userOp.signature.unpackSelection();
+        bytes memory validatorData;
+        bytes calldata validatorSig;
+        bytes calldata authSig;
 
+        if (operation == Operation.USE) {
+            (validatorSig, authSig) = SigDecode.unpackUse(userOp.signature[53:]);
+            validatorData = $validatorData[validator][eoa].data;
+        } else if (operation == Operation.ENABLE) {
+            (validatorData, validatorSig, authSig) = SigDecode.unpackEnable(userOp.signature[53:]);
+            // enable validator module for account
+            $validators.init({ account: eoa });
+            $validators.push({ account: eoa, newEntry: validator });
+            $validatorData[validator][eoa] = ValidatorData({ data: validatorData });
+        } else {
+            revert();
+        }
+
+        return _validate({
+            eoa: eoa,
+            validator: validator,
+            validatorData: validatorData,
+            validationSig: validatorSig,
+            authSig: authSig,
+            nonce: nonce
+        });
+    }
+
+    function _validate(
+        address eoa,
+        address validator,
+        bytes memory validatorData,
+        bytes calldata validationSig,
+        bytes calldata authSig,
+        uint256 nonce
+    ) internal returns (uint256 validationData) {
         bytes32 commit = keccak256(abi.encodePacked(validator, validatorData));
-        bytes32 digest = getDigest(commit, nonce);
-        address signer = ecrecover(digest, uint8(bytes1(authSig[64])), bytes32(authSig[0:32]), bytes32(authSig[32:64]));
-        return caller == signer ? 0 : 1; // return true when caller == signer
+        address signer = ecrecover(
+            getDigest(commit, nonce), uint8(bytes1(authSig[64])), bytes32(authSig[0:32]), bytes32(authSig[32:64])
+        );
+        if (eoa != signer) return 1;
+        bool success = IStatelessValidator(validator).validateSignatureWithData({
+            hash: keccak256(abi.encodePacked(validationData)),
+            signature: validationSig,
+            data: validatorData
+        });
+        return success ? 0 : 1;
     }
 
     function executeUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash) external {
         require(msg.sender == address(ep), "!ep");
-        address caller = address(bytes20(bytes32(userOp.nonce)));
+        address eoa = address(bytes20(bytes32(userOp.nonce)));
         address validator = address(bytes20(userOp.signature[0:20]));
         (bytes calldata validatorData, bytes calldata validatorSig, bytes calldata authSig) = parseSig(userOp.signature);
 
         // do auth
-        doAuth(caller, validator, validatorData, authSig);
+        doAuth(eoa, validator, validatorData, authSig);
 
-        // do enable
-        doEnable(validator, validatorData);
-
-        // do validation
         // NOTE : userOp.sender will remain as invoker, let's keep this in mind
         PackedUserOperation memory op = userOp;
         op.signature = validatorSig;
@@ -97,10 +136,10 @@ contract EIP3074ERC7579Account is Auth {
         doExecute(userOp.callData[4:]);
     }
 
-    function doAuth(address caller, address validator, bytes calldata validatorData, bytes calldata authSig) internal {
+    function doAuth(address eoa, address validator, bytes calldata validatorData, bytes calldata authSig) internal {
         bytes32 commit = keccak256(abi.encodePacked(validator, validatorData));
         Signature memory sig = Signature({
-            signer: caller,
+            signer: eoa,
             yParity: vToYParity(uint8(bytes1(authSig[64]))),
             r: bytes32(authSig[0:32]),
             s: bytes32(authSig[32:64])
@@ -109,10 +148,9 @@ contract EIP3074ERC7579Account is Auth {
         require(success, "Auth failed");
     }
 
-    function doEnable(address validator, bytes calldata validatorData) internal {
-        (bool success,) =
-            authcall(validator, abi.encodeWithSelector(IModule.onInstall.selector, validatorData), 0, gasleft());
-        require(success, "Enable failed");
+    function doEnable(address eoa, address validator, bytes calldata validatorData) internal {
+        $validators.push({ account: eoa, newEntry: validator });
+        $validatorData[validator][eoa] = ValidatorData({ data: validatorData });
     }
 
     function doValidation(address validator, PackedUserOperation memory op, bytes32 userOpHash)

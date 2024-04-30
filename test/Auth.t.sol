@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
-import { Auth } from "../src/Auth.sol";
+import { Auth } from "src/utils/Auth.sol";
 import { vToYParity } from "./utils.sol";
 
 contract AuthTest is Test {

@@ -115,3 +115,10 @@ interface ISigner is IModule {
         view
         returns (bytes4);
 }
+
+interface IStatelessValidator {
+    function validateSignatureWithData(bytes32 hash, bytes calldata signature, bytes calldata data)
+        external
+        view
+        returns (bool);
+}

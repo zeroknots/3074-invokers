@@ -4,10 +4,10 @@ import "forge-std/Test.sol";
 import "src/interfaces/PackedUserOperation.sol";
 
 import "src/EIP3074ERC7579Account.sol";
-import "src/MockValidator.sol";
-import { EntryPointLib } from "../src/erc4337Util.sol";
+import "src/utils/MockValidator.sol";
+import { EntryPointLib } from "../src/utils/erc4337Util.sol";
 
-contract EIP3074Test is Test {
+contract ERC7579Test is Test {
     address owner;
     uint256 ownerKey;
     IEntryPoint public ep;
@@ -47,7 +47,10 @@ contract EIP3074Test is Test {
             accountGasLimits: bytes32(abi.encodePacked(uint128(1000000), uint128(1000000))),
             preVerificationGas: 0,
             signature: abi.encodePacked(
-                address(mockValidator), uint256(0), abi.encode(hex"deadbeef", hex"cafecafe", abi.encodePacked(r, s, v))
+                Operation.ENABLE,
+                address(mockValidator),
+                uint256(0),
+                abi.encode(hex"deadbeef", hex"cafecafe", abi.encodePacked(r, s, v))
             )
         });
         PackedUserOperation[] memory ops = new PackedUserOperation[](1);

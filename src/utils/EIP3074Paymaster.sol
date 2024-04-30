@@ -1,8 +1,8 @@
 pragma solidity ^0.8.0;
 
 import { Auth } from "./Auth.sol";
-import "./interfaces/IPaymaster.sol";
-import "./interfaces/IEntryPoint.sol";
+import "../interfaces/IPaymaster.sol";
+import "../interfaces/IEntryPoint.sol";
 import "./utils.sol";
 
 contract EIP3074Paymaster is IPaymaster, Auth {

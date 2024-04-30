@@ -33,7 +33,7 @@ build-solc-patch:
 .PHONY: test
 test:
 	@[[ ! -a ./bin/forge ]] && make build-forge-patch || true
-	@./bin/forge test -vvv
+	@./bin/forge test --mc ERC7579Test -vvvvvv
 
 .PHONY: build
 build:

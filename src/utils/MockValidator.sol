@@ -1,9 +1,9 @@
 pragma solidity ^0.8.0;
 
-import { IValidator } from "./interfaces/IERC7579Modules.sol";
-import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
+import { IValidator, IStatelessValidator } from "../interfaces/IERC7579Modules.sol";
+import { PackedUserOperation } from "../interfaces/PackedUserOperation.sol";
 
-contract MockValidator is IValidator {
+contract MockValidator is IValidator, IStatelessValidator {
     mapping(address caller => bytes) public data;
 
     mapping(address caller => bytes32) public lastHash;
@@ -31,5 +31,14 @@ contract MockValidator is IValidator {
 
     function isValidSignatureWithSender(address, bytes32, bytes calldata) external view returns (bytes4) {
         return 0xffffffff;
+    }
+
+    function validateSignatureWithData(bytes32 hash, bytes calldata signature, bytes calldata data)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return true;
     }
 }

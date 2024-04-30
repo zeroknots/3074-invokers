@@ -3,12 +3,12 @@ pragma solidity ^0.8.20;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
-import { Auth } from "../src/Auth.sol";
-import { EIP3074Account } from "../src/EIP3074Account.sol";
+import { Auth } from "../src/utils/Auth.sol";
+import { EIP3074Account } from "../src/utils/EIP3074Account.sol";
 import { vToYParity } from "./utils.sol";
 import { PackedUserOperation } from "../src/interfaces/PackedUserOperation.sol";
 import { IEntryPoint } from "../src/interfaces/IEntryPoint.sol";
-import { EntryPointLib } from "../src/erc4337Util.sol";
+import { EntryPointLib } from "../src/utils/erc4337Util.sol";
 
 contract Callee {
     error UnexpectedSender(address expected, address actual);

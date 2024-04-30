@@ -2,8 +2,8 @@
 pragma solidity ^0.8.23;
 
 import { Auth } from "./Auth.sol";
-import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
-import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
+import { PackedUserOperation } from "../interfaces/PackedUserOperation.sol";
+import { IEntryPoint } from "../interfaces/IEntryPoint.sol";
 import { vToYParity } from "./utils.sol";
 import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
 
