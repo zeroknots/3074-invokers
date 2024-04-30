@@ -4,6 +4,7 @@ pragma solidity ^0.8.23;
 import "./lib/ModeLib.sol";
 import "./lib/ExecutionLib.sol";
 import { MultiSendAuthCallOnly } from "./utils/MultiSendAuthCallOnly.sol";
+import "forge-std/console2.sol";
 
 contract ExecutionHelper {
     using ModeLib for ModeCode;
@@ -15,6 +16,7 @@ contract ExecutionHelper {
     function _authCall(address to, uint256 value, bytes memory data) internal returns (bool) {
         bool success;
         uint256 length = data.length;
+
         assembly {
             success := authcall(gas(), to, value, 0, data, length, 0, 0)
         }
@@ -27,7 +29,11 @@ contract ExecutionHelper {
 
         if (_calltype == CALLTYPE_SINGLE) {
             (address to, uint256 value, bytes calldata callData) = executionCalldata.decodeSingle();
+            console2.log("to: %s", to);
+            console2.logBytes(callData);
             _authCall(to, value, callData);
         }
     }
+
+    function _installModule(uint256 moduleTypeId, address module, bytes calldata initData) internal { }
 }

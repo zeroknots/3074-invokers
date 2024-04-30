@@ -4,6 +4,7 @@ pragma solidity ^0.8.23;
 import { Auth } from "./utils/Auth.sol";
 import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
 import { IValidator, IModule, IStatelessValidator } from "./interfaces/IERC7579Modules.sol";
+import { IERC7579Account } from "./interfaces/IERC7579Account.sol";
 import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import { SentinelList4337Lib } from "sentinellist/SentinelList4337.sol";
 import "./lib/ModeLib.sol";
@@ -13,6 +14,7 @@ import "./utils/utils.sol";
 import "./DataTypes.sol";
 import { MultiSendAuthCallOnly } from "./utils/MultiSendAuthCallOnly.sol";
 import "forge-std/console2.sol";
+import "./ExecutionHelper.sol";
 /*
     TODO
     - add storage support 
@@ -27,7 +29,7 @@ import "forge-std/console2.sol";
 
 // @notice THIS IS EXPERIMENTAL, DO NOT USE THIS FOR PROD
 // @dev NOTE : this is vulnerable to DoS since actual validation for userOpHash is done on the execution side, figuring out the fixes though
-contract EIP3074ERC7579Account is Auth {
+contract EIP3074ERC7579Account is Auth, ExecutionHelper {
     using ExecutionLib for bytes;
     using SentinelList4337Lib for SentinelList4337Lib.SentinelList;
     using SigDecode for bytes;
@@ -127,7 +129,15 @@ contract EIP3074ERC7579Account is Auth {
         PackedUserOperation memory op = userOp;
         op.signature = validatorSig;
 
-        doExecute(userOp.callData[4:]);
+        // doExecute(userOp.callData[4:]);
+
+        bytes4 accountSig = bytes4(userOp.callData[4:8]);
+
+        if (accountSig == IERC7579Account.execute.selector) {
+            // (CallType _calltype, ExecType _execType, ModeSelector _modeSelector, ModePayload _modePayload) =
+            //     ModeLib.decode();
+            _execute(ModeCode.wrap(bytes32(userOp.callData[8:40])), userOp.callData[40:]);
+        }
     }
 
     function doAuth(address eoa, address validator, bytes memory validatorData, bytes calldata authSig) internal {
